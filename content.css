@@ -1,0 +1,53 @@
+/* content.css — the hover tooltip shown on TCGplayer price pages.
+   High z-index + fixed positioning so it floats above TCGplayer's own UI.
+   pointer-events:none keeps it from stealing hover from the price underneath. */
+
+#tcgcad-tip {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+  background: #273248;
+  color: #FFEBD2;
+  border: 1px solid #46536F;
+  border-radius: 10px;
+  padding: 9px 11px;
+  font: 12px/1.5 ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 12px 32px rgba(2, 8, 20, .45);
+  max-width: 240px;
+  opacity: 0;
+  transition: opacity .08s ease;
+}
+#tcgcad-tip.show { opacity: 1; }
+
+#tcgcad-tip .tip-main {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  font-variant-numeric: tabular-nums;
+  color: #FFEBD2;
+  margin-bottom: 6px;
+  white-space: nowrap;
+}
+#tcgcad-tip .tip-main .usd { color: #A2ABBE; font-weight: 600; }
+#tcgcad-tip .tip-main .arrow { color: #FC7643; margin: 0 6px; font-weight: 700; }
+#tcgcad-tip.range .tip-main { font-size: 13px; }
+
+#tcgcad-tip .tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  color: #A2ABBE;
+  font-size: 11px;
+  line-height: 1.7;
+  font-variant-numeric: tabular-nums;
+}
+#tcgcad-tip .tip-row b { color: #F3E3CC; font-weight: 600; }
+
+#tcgcad-tip .tip-foot {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #3A4763;
+  color: #8A93A8;
+  font-size: 10px;
+}
