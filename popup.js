@@ -20,6 +20,20 @@ const money = (n) => new Intl.NumberFormat("en-US", { style: "currency", currenc
 // A cached rate from v1.0 has no `currency` field — that one is CAD.
 const rateUsable = () => !!(fx && fx.rate && normCur(fx.currency || DEFAULT_CURRENCY) === code());
 
+// Age of the rate itself, not of our fetch — the ECB publishes on weekdays only,
+// so a Sunday fetch serves Friday's rate. Clock starts at the end of the rate's
+// own day; falls back to fetchedAt when the record carries no date.
+// Mirrors staleness() in content.js — keep the two in step.
+function staleness(f, now) {
+  const n = now === undefined ? Date.now() : now;
+  const m = f && f.date && /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(f.date));
+  if (m) {
+    const end = Date.UTC(+m[1], +m[2] - 1, +m[3]) + 24 * 3600 * 1000;
+    if (!isNaN(end)) return Math.max(0, n - end);
+  }
+  return n - ((f && f.fetchedAt) || 0);
+}
+
 function ago(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   if (s < 90) return "just now";
@@ -35,7 +49,7 @@ function renderPreview() {
     $("previewCad").textContent = money(100 * fx.rate);
     $("previewNote").textContent = pct === 100
       ? "straight convert × " + fx.rate.toFixed(4)
-      : pct + "% market: " + money(100 * (pct / 100) * fx.rate);
+      : pct + "% of the listed price: " + money(100 * (pct / 100) * fx.rate);
   } else {
     $("previewCad").textContent = money(0).replace(/[\d.,]+/, "—"); // e.g. "CA$—"
     $("previewNote").textContent = "Waiting for today’s rate…";
@@ -47,9 +61,10 @@ function renderRate() {
   $("rateLabel").textContent = "1 USD equals";
   if (rateUsable()) {
     $("rateVal").textContent = fx.rate.toFixed(4) + " " + code();
-    const age = Date.now() - fx.fetchedAt;
+    const age = staleness(fx);
     $("rateMeta").textContent =
-      "Updated " + ago(age) + (fx.date ? " · " + fx.date : "") +
+      (fx.date ? "ECB rate " + fx.date + " · " : "") +
+      "checked " + ago(Date.now() - (fx.fetchedAt || 0)) +
       (fx.source === "er-api" ? " · backup source" : "");
     badge.classList.toggle("stale", age > 24 * 3600 * 1000);
   } else {

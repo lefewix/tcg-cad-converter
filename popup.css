@@ -17,6 +17,7 @@
   --hair: rgba(255, 255, 255, .08);
   --hairh: rgba(255, 255, 255, .14);
   --err: #ff8b8b;
+  --warn: #f0b429;   /* staleness is amber across the family, never red */
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -66,7 +67,7 @@ header {
   background: var(--ac);
   transition: background .15s ease;
 }
-.live.stale i { background: var(--err); }
+.live.stale i { background: var(--warn); }
 
 .box {
   padding: 10px 12px;
@@ -179,25 +180,25 @@ select option { background: var(--surface); color: var(--txt); }
   color: var(--m7);
 }
 
-.link {
-  padding: 3px 8px;
-  background: color-mix(in srgb, var(--ac) 16%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ac-soft) 32%, transparent);
-  border-radius: 6px;
-  color: var(--ac-pale);
+/* Refresh is an action, not a status: solid accent, the house primary button. */
+.btn {
+  padding: 4px 11px;
+  background: var(--ac);
+  border: 1px solid var(--ac);
+  border-radius: 7px;
+  color: #fff;
   font: inherit;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: background .15s ease, border-color .15s ease, color .15s ease;
+  transition: background .15s ease, border-color .15s ease;
 }
-.link:hover {
-  background: color-mix(in srgb, var(--ac) 26%, transparent);
-  border-color: color-mix(in srgb, var(--ac-soft) 50%, transparent);
-  color: var(--txtstrong);
+.btn:hover {
+  background: color-mix(in srgb, var(--ac) 85%, white);
+  border-color: color-mix(in srgb, var(--ac) 85%, white);
 }
-.link:active { transform: translateY(1px); }
-.link:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+.btn:active { transform: translateY(1px); }
+.btn:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
 
 footer {
   margin-top: 12px;

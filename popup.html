@@ -33,7 +33,7 @@
   </div>
 
   <div class="box field">
-    <label class="label" for="percent">Market price percentage (%)</label>
+    <label class="label" for="percent">Percentage of the listed price (%)</label>
     <input id="percent" type="number" min="1" max="500" step="1" inputmode="decimal">
   </div>
 
@@ -41,11 +41,11 @@
     <div class="rate-line"><span id="rateLabel">1 USD equals</span><b id="rateVal">—</b></div>
     <div class="rate-meta">
       <span id="rateMeta">No rate yet</span>
-      <button class="link" id="refresh">Refresh</button>
+      <button class="btn" id="refresh">Refresh</button>
     </div>
   </div>
 
-  <footer>Rates from Frankfurter (ECB), refreshed daily. Click a price to pin its tooltip; cart totals get a converted chip.</footer>
+  <footer>Rates from Frankfurter (ECB), published on weekdays only. The percentage applies to the price you hover — a listing ask, not a sold average. Click a price to pin its tooltip; cart totals get a converted chip.</footer>
 
   <script src="popup.js"></script>
 </body>

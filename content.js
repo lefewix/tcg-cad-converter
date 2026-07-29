@@ -29,8 +29,12 @@
   // hyphen U+2011, minus U+2212).
   const CUR = "(?:US\\s?\\$|USD\\s?\\$?|\\$)\\s?";
   const AMT = CUR + "(\\d{1,3}(?:,\\d{3})+(?:\\.\\d{2})?|\\d+(?:\\.\\d{2})?)";
-  const DASH = "(?:--|[-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2212]|to)";
+  const DASHES = "--|[-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2212]|to";
+  const DASH = "(?:" + DASHES + ")";
   const RANGE_RE = new RegExp("^[^$\\d]{0,24}?" + AMT + "\\s*" + DASH + "\\s*" + AMT + "\\s*$", "i");
+  // Two amounts separated by nothing but a dash — "$5.00 - $10.00" inside a longer
+  // string. Used to keep a claim word's grip on both halves of a pair.
+  const PAIR_GAP_RE = new RegExp("^\\s*(?:" + DASHES + ")\\s*(?:USD?\\s?\\$?|US\\s?\\$?)?$", "i");
 
   let settings = { percent: 90, targetCurrency: DEFAULT_CURRENCY };
   let fx = null;            // { rate, currency, fetchedAt, date, source }
@@ -80,7 +84,28 @@
     });
   }
 
-  function staleness(f) { return Date.now() - ((f && f.fetchedAt) || 0); }
+  // How old the RATE is — not how long ago we fetched it. The ECB publishes on
+  // weekdays only, so a Sunday fetch returns Friday's rate and even a midweek
+  // "latest" is usually the previous day's fix. Measuring `fetchedAt` would call
+  // a three-day-old weekend rate "just now".
+  //
+  // The clock starts at the END of the rate's own day: a rate dated yesterday is
+  // 0–24h old (normal, all day), Friday's rate read on Sunday is 24–48h old, and
+  // read on Monday morning it is ~57h. Falls back to `fetchedAt` when the record
+  // carries no date (the backup source occasionally omits it).
+  function rateDayEndMs(f) {
+    const m = f && f.date && /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(f.date));
+    if (!m) return null;
+    const t = Date.UTC(+m[1], +m[2] - 1, +m[3]) + 24 * 3600 * 1000;
+    return isNaN(t) ? null : t;
+  }
+
+  function staleness(f, now) {
+    const n = now === undefined ? Date.now() : now;
+    const end = rateDayEndMs(f);
+    if (end !== null) return Math.max(0, n - end);
+    return n - ((f && f.fetchedAt) || 0);
+  }
 
   // Records written by v1.0 carry no `currency` field — those are CAD.
   function rateUsable() {
@@ -117,7 +142,15 @@
     if (rm) {
       const a = parseFloat(rm[1].replace(/,/g, ""));
       const b = parseFloat(rm[2].replace(/,/g, ""));
-      if (!isNaN(a) && !isNaN(b)) return { prices: [a, b], range: true };
+      if (!isNaN(a) && !isNaN(b)) {
+        // "You save $5.00 - $10.00" is a savings range, not a price range. A claim
+        // word owns the amounts that follow it, so hand the string to the marker
+        // system instead of short-circuiting past it.
+        if (!HAS_CLAIM_RE.test(t) && a <= b) return { prices: [a, b], range: true };
+        // Descending with no claim word ("$50.00 - $10.00") reads as a subtraction.
+        // Presenting it lo–hi would invent a range that isn't there.
+        if (a > b) return { prices: [], range: false };
+      }
     }
 
     const n = pickPrice(t);
@@ -127,7 +160,16 @@
   // Words that label an amount which is *not* the price we want: shipping, the
   // struck-through original, the discount. Each one claims the amount it sits next
   // to, so what's left over is the real price.
-  const CLAIM_RE = /\b(shipping|ship|delivery|freight|handling|tax|fee|was|were|reg|regular|orig|original|originally|msrp|save|savings|discount|coupon|off)\b/gi;
+  const CLAIM_WORDS =
+    "shipping|ship|delivery|freight|handling|tax|fee|was|were|reg|regular|orig|original|" +
+    "originally|msrp|save|saves|saved|savings|discount|coupon|credit|balance|owing|off";
+  const CLAIM_RE = new RegExp("\\b(?:" + CLAIM_WORDS + ")\\b", "gi");
+  const HAS_CLAIM_RE = new RegExp("\\b(?:" + CLAIM_WORDS + ")\\b", "i"); // stateless: safe for .test()
+
+  // The mirror image: words that mark an amount as *the* price. An amount they
+  // introduce is never taken by a claim word, which settles otherwise-symmetric
+  // strings like "Price $4.99 shipping $0.99".
+  const KEEP_RE = /\b(?:price|prices|total|market|listed|listing|asking|each|buy\s*it\s*now|bin)\b/gi;
 
   function allPrices(t) {
     const out = [];
@@ -140,35 +182,68 @@
     return out;
   }
 
+  // Amounts a KEEP word introduces ("Price $4.99"): protected from being claimed.
+  function protectedAmounts(t, amounts) {
+    const keep = new Set();
+    let m;
+    KEEP_RE.lastIndex = 0;
+    while ((m = KEEP_RE.exec(t))) {
+      const endAt = m.index + m[0].length;
+      const i = amounts.findIndex((a) => a.start >= endAt && a.start - endAt <= 15);
+      if (i >= 0) keep.add(i);
+    }
+    return keep;
+  }
+
   // Choose which amount in a mixed string is the price. "Was $19.99 now $12.99" is
-  // $12.99; "Shipping $0.99 Price $4.99" is $4.99. A marker claims the amount that
-  // follows it when one is close by, otherwise the amount just before it — that
-  // covers both "Shipping: $0.99" and "$0.00 Shipping". When several unclaimed
-  // amounts remain in marker-bearing text we'd only be guessing, so we show nothing.
+  // $12.99; "Shipping $0.99 Price $4.99" is $4.99. A marker claims the amount it
+  // labels; when it sits *between* two amounts the trailing form wins, because
+  // "$3.99 shipping $12.99" reads as "[$3.99 shipping] [$12.99]" — the label belongs
+  // to the amount it follows, not the next one along. When several unclaimed amounts
+  // remain in marker-bearing text we'd only be guessing, so we show nothing.
   function pickPrice(t) {
     const amounts = allPrices(t);
     if (!amounts.length) return null;
     if (amounts.length === 1) return amounts[0].n;
 
+    const keep = protectedAmounts(t, amounts);
     const claimed = new Set();
+    const free = (i) => !claimed.has(i) && !keep.has(i);
+
+    // A claim word owns both halves of a dash-joined pair: in "Save $5.00 - $10.00"
+    // the $10.00 is the top of the *saving*, not a price hiding behind the dash.
+    const partnerOf = (i) => {
+      for (const j of [i - 1, i + 1]) {
+        if (!amounts[j]) continue;
+        const lo = Math.min(i, j), gap = t.slice(amounts[lo].end, amounts[lo + 1].start);
+        if (PAIR_GAP_RE.test(gap)) return j;
+      }
+      return -1;
+    };
+
     let mk, sawMarker = false;
     CLAIM_RE.lastIndex = 0;
     while ((mk = CLAIM_RE.exec(t))) {
       sawMarker = true;
       const at = mk.index, endAt = at + mk[0].length;
-      let idx = amounts.findIndex((a, i) => a.start >= endAt && a.start - endAt <= 15 && !claimed.has(i));
-      if (idx < 0) {
-        for (let i = amounts.length - 1; i >= 0; i--) {
-          if (amounts[i].end <= at && at - amounts[i].end <= 15 && !claimed.has(i)) { idx = i; break; }
-        }
+
+      let back = -1;
+      for (let i = amounts.length - 1; i >= 0; i--) {
+        if (amounts[i].end <= at && at - amounts[i].end <= 15 && free(i)) { back = i; break; }
       }
-      if (idx >= 0) claimed.add(idx);
+      const fwd = amounts.findIndex((a, i) => a.start >= endAt && a.start - endAt <= 15 && free(i));
+
+      const idx = back >= 0 ? back : fwd;   // trailing label first, then leading label
+      if (idx >= 0) {
+        claimed.add(idx);
+        const p = partnerOf(idx);
+        if (p >= 0 && !keep.has(p)) claimed.add(p);
+      }
     }
 
     const left = amounts.filter((_, i) => !claimed.has(i));
     if (left.length === 1) return left[0].n;
     if (!sawMarker) return amounts[0].n;   // no markers: unchanged first-price behaviour
-    if (!left.length) return amounts[0].n; // every amount claimed: fall back to the first
     return null;                           // genuinely ambiguous — better to show nothing
   }
 
@@ -179,7 +254,7 @@
       if (el.nodeType === 1) {
         if (el.classList && el.classList.contains(CHIP_CLASS)) return null;
         const r = pricesIn(el.textContent);
-        if (r.prices.length) return { el, prices: r.prices, range: r.range };
+        if (r.prices.length) return { el, prices: r.prices, range: r.range, pinnable: !isInteractive(el) };
       }
       el = el.parentElement;
       hops++;
@@ -239,17 +314,21 @@
       const stale = age > STALE_MS
         ? '<div class="tip-stale">Rate is ' + oldness(age) + " — popup to refresh</div>"
         : "";
+      // Two different clocks, and the difference matters: the date is the rate's own
+      // publication day, "checked" is when we last talked to the API.
       const footer =
-        '<div class="tip-foot">Rate updated ' + ago(age) +
-        (safeDate ? " · " + safeDate : "") + "</div>";
-      const pinRow = pinned ? '<div class="tip-pin">Pinned · Esc or click away</div>' : "";
+        '<div class="tip-foot">' + (safeDate ? "ECB rate " + safeDate + " · " : "") +
+        "checked " + ago(Date.now() - (fx.fetchedAt || 0)) + "</div>";
+      const pinRow = pinned
+        ? '<div class="tip-pin">Pinned · Esc or click away</div>'
+        : (info.pinnable ? '<div class="tip-hint">Click to pin</div>' : "");
       const rateRow = '<div class="tip-row"><span>1 USD</span><b>' + rate.toFixed(4) + " " + code + "</b></div>";
 
       if (!isRange) {
         const r = rows[0];
         t.classList.remove("range");
         const pctRow = pct === 100 ? "" :
-          '<div class="tip-row"><span>' + pct + '% market</span><b>' + money(r.adj) + "</b></div>";
+          '<div class="tip-row"><span>' + pct + '% of listed price</span><b>' + money(r.adj) + "</b></div>";
         t.innerHTML =
           '<div class="tip-main"><span class="usd">' + usd(r.p) + '</span>' +
           '<span class="arrow">→</span>' + money(r.straight) + "</div>" +
@@ -258,7 +337,7 @@
         const lo = rows[0], hi = rows[1];
         t.classList.add("range");
         const pctRow = pct === 100 ? "" :
-          '<div class="tip-row"><span>' + pct + '% market</span><b>' + money(lo.adj) + "–" + money(hi.adj) + "</b></div>";
+          '<div class="tip-row"><span>' + pct + '% of listed price</span><b>' + money(lo.adj) + "–" + money(hi.adj) + "</b></div>";
         t.innerHTML =
           '<div class="tip-main">' + money(lo.straight) + '<span class="arrow">–</span>' + money(hi.straight) + "</div>" +
           '<div class="tip-row"><span>USD range</span><b>' + usd(lo.p) + "–" + usd(hi.p) + "</b></div>" +
@@ -388,20 +467,30 @@
       if (!amountEl) continue;
       const value = lastPriceIn(amountEl.textContent);
       if (value === null) continue;
-      const text = "≈ " + money(value * fx.rate);
+
+      // This is the one surface where money is about to be committed, so the age of
+      // the rate belongs in the chip itself — not hidden in a title attribute.
+      const age = staleness(fx);
+      const stale = age > STALE_MS;
+      const text = "≈ " + money(value * fx.rate) + (stale ? " · rate " + oldness(age) : "");
+      const cls = CHIP_CLASS + (stale ? " " + CHIP_CLASS + "-stale" : "");
+      const title = "Converted at " + fx.rate.toFixed(4) + " " + curCode() + " per USD" +
+        (fx.date ? " (rate dated " + String(fx.date).replace(/[<>&"']/g, "") + ")" : "");
 
       // Idempotent: reuse our chip if it's already the next sibling; never add a second.
       const next = amountEl.nextElementSibling;
       if (next && next.classList && next.classList.contains(CHIP_CLASS)) {
         if (next.textContent !== text) next.textContent = text;
+        if (next.className !== cls) next.className = cls;
+        next.title = title;
         continue;
       }
       if (amountEl.querySelector && amountEl.querySelector("." + CHIP_CLASS)) continue;
 
       const chip = document.createElement("span");
-      chip.className = CHIP_CLASS;
+      chip.className = cls;
       chip.textContent = text;
-      chip.title = "Converted at " + fx.rate.toFixed(4) + " " + curCode() + " per USD";
+      chip.title = title;
       amountEl.insertAdjacentElement("afterend", chip);
     }
   }
@@ -459,14 +548,24 @@
   // Prices on search results live *inside* the product card's <a>, and listing rows
   // put them next to "Add to cart". Pinning must never swallow those clicks, so we
   // only pin when the click lands on plain markup — and we never stop propagation.
-  const INTERACTIVE_SEL = 'a[href],button,[role="button"],input,select,label,[onclick]';
+  const INTERACTIVE_SEL = 'a[href],button,[role="button"],input,select,textarea,[onclick]';
+
+  // A bare <label> is not interactive — TCGplayer wraps whole price-guide rows in one.
+  // It only owns the click when it actually drives a control.
+  function isInteractive(el) {
+    if (!el || !el.closest) return false;
+    if (el.closest(INTERACTIVE_SEL)) return true;
+    const lab = el.closest("label");
+    return !!(lab && (lab.htmlFor || lab.control ||
+      (lab.querySelector && lab.querySelector("input,select,textarea,button"))));
+  }
 
   function onClick(e) {
     if (pinned) { hide(); return; }           // click anywhere unpins
     const t = e.target;
     const el = t && (t.nodeType === 1 ? t : t.parentElement);
     if (!el) return;
-    if (el.closest && el.closest(INTERACTIVE_SEL)) return;  // let the page have it
+    if (isInteractive(el)) return;            // let the page have it
     const info = findPriceEl(el);
     if (!info) return;
     pinned = true;
@@ -496,6 +595,9 @@
 
   // Exported for the offline parser harness; harmless in a browser (no `module`).
   if (typeof module !== "undefined" && module.exports) {
-    module.exports = { pricesIn, lastPriceIn, findAmountEl, isCheckoutPage, onClick };
+    module.exports = {
+      pricesIn, pickPrice, lastPriceIn, findAmountEl, isCheckoutPage, onClick,
+      staleness, isInteractive, STALE_MS,
+    };
   }
 })();

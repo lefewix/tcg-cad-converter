@@ -8,11 +8,11 @@ A browser extension that converts USD prices on TCGplayer into your own currency
 - **Pin the tooltip** — click a plain price to pin the tooltip in place; it stops following the cursor and survives scrolling. Esc or a click elsewhere unpins. Clicks on links, buttons, and other controls always go to the page, so search results and "Add to cart" keep working
 - **Cart & checkout totals** — on cart and checkout pages the order total is annotated in place with a small converted chip
 - **Choose your currency** — CAD, EUR, GBP, AUD, JPY, or MXN, set in the popup and synced across your browsers
-- **Market percentage** — set your own percentage (e.g. 90%) to see adjusted values alongside the straight conversion
+- **Percentage of the listed price** — set your own percentage (e.g. 90%) to see an adjusted value alongside the straight conversion. It is applied to the price you are hovering, which on TCGplayer is a seller's asking price — not an average of recent sales
 - **Live daily rate** — from Frankfurter (European Central Bank reference rates), with an automatic fallback source
-- **Price ranges** — a range is shown only when the text actually reads as one (`$10.00 – $15.00`, `US$10.00 - US$15.00`, `$10 to $15`); anything else converts a single price
-- **Mixed price text** — when a string carries shipping, sale, or discount labels (`Was $19.99 now $12.99`), the actual price is converted rather than the first number; if it stays ambiguous, nothing is shown
-- **Stale-rate warning** — if the cached rate is over 24 hours old, the tooltip says so
+- **Price ranges** — a range is shown only when the text actually reads as one (`$10.00 – $15.00`, `US$10.00 - US$15.00`, `$10 to $15`). A label in front of the amounts (`You save $5.00 - $10.00`, `Shipping $1.00 - $3.00`) means they belong to that label, not to a price range, and a descending pair (`Balance due: $50.00 - $10.00`) is a subtraction — neither is presented as a range
+- **Mixed price text** — when a string carries shipping, sale, or discount labels (`Was $19.99 now $12.99`, `$3.99 shipping $12.99`), the actual price is converted rather than the first number; if it stays ambiguous, nothing is shown
+- **Stale-rate warning** — measured against the rate's own publication date, not against when it was fetched. Over 24 hours old and the tooltip says so; on a cart or checkout page the age is written into the converted chip itself
 
 ## Installation
 
@@ -40,7 +40,13 @@ The only network requests are to the two public exchange-rate APIs listed above.
 ## Limitations
 
 - Conversions use the ECB daily reference rate, which is not a retail exchange rate — treat values as estimates
+- **The ECB publishes on weekdays only.** There is no weekend fix: a rate fetched on Sunday is Friday's, and even a midweek "latest" is usually the previous day's. Rate age is therefore measured from the rate's own date, and over the weekend the tooltip and the cart chip will correctly report a rate that is one to three days old
+- The percentage is applied to the price under your cursor. That is a listing ask, not a sold average — a "90%" figure here is not comparable to one computed from recent sales
 - Only USD prices in standard formats (`$12.99`, `$1,234.56`) are detected
+
+## Tests
+
+`node test.js` — no dependencies, no build step. It covers the price-range grammar in both directions (what must render as a range and what must not), which amount in a mixed string is the price, rate staleness including the weekend ECB gap, cart-page detection, and which markup may be click-to-pinned. Exit code is non-zero on any failure.
 
 ## Contributing
 

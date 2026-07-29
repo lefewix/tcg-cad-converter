@@ -113,6 +113,16 @@
   background: #8b5cf6;
 }
 
+/* Quiet affordance: only shown when the price under the cursor can actually be
+   pinned (clicks inside links and buttons still belong to the page). */
+#tcgcad-tip .tip-hint {
+  margin-top: 6px;
+  color: #7a7690;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: .02em;
+}
+
 /* Cart / checkout order-total chip. Inline next to the site's own total. */
 .tcgcad-total-chip {
   display: inline-block;
@@ -132,4 +142,13 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-transform: none;
+}
+
+/* Stale rate on a page where money is about to be committed: same amber as the
+   tooltip warning (#8a5a00 on #fff8e6 ≈ 5.5:1), with the age spelled out in the
+   chip text so it can't be missed. */
+.tcgcad-total-chip-stale {
+  background: #fff8e6;
+  border-color: rgba(180, 120, 10, .45);
+  color: #8a5a00;
 }

@@ -23,6 +23,7 @@ No build step is required — this is a plain Manifest V3 extension.
 - Keep changes focused; one feature or fix per PR
 - Match the existing code style (vanilla JavaScript, no frameworks, two-space indentation)
 - Network access must remain limited to the exchange-rate APIs declared in the manifest
+- Run `node test.js` and add a case for whatever you changed — the price parser earns its regressions honestly
 - Test on real TCGplayer pages before submitting
 
 ## License
