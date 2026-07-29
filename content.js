@@ -24,8 +24,13 @@
   // "$12.99 + $0.00 Shipping" from being presented as a confident "$0.00–$12.99".
   // Bare integers are allowed here (unlike PRICE_RE) because the surrounding
   // range grammar is evidence enough that "$10 to $15" really is money.
-  const AMT = "\\$\\s?(\\d{1,3}(?:,\\d{3})+(?:\\.\\d{2})?|\\d+(?:\\.\\d{2})?)";
-  const RANGE_RE = new RegExp("^[^$\\d]{0,24}?" + AMT + "\\s*(?:-|\\u2013|\\u2014|to)\\s*" + AMT + "\\s*$", "i");
+  // The amount may carry a "US$" / "USD" / "USD $" prefix on either side of the dash,
+  // and the dash itself has many renderings (ASCII, "--", en/em dash, non-breaking
+  // hyphen U+2011, minus U+2212).
+  const CUR = "(?:US\\s?\\$|USD\\s?\\$?|\\$)\\s?";
+  const AMT = CUR + "(\\d{1,3}(?:,\\d{3})+(?:\\.\\d{2})?|\\d+(?:\\.\\d{2})?)";
+  const DASH = "(?:--|[-\\u2010\\u2011\\u2012\\u2013\\u2014\\u2015\\u2212]|to)";
+  const RANGE_RE = new RegExp("^[^$\\d]{0,24}?" + AMT + "\\s*" + DASH + "\\s*" + AMT + "\\s*$", "i");
 
   let settings = { percent: 90, targetCurrency: DEFAULT_CURRENCY };
   let fx = null;            // { rate, currency, fetchedAt, date, source }
@@ -115,14 +120,56 @@
       if (!isNaN(a) && !isNaN(b)) return { prices: [a, b], range: true };
     }
 
+    const n = pickPrice(t);
+    return { prices: n === null ? [] : [n], range: false };
+  }
+
+  // Words that label an amount which is *not* the price we want: shipping, the
+  // struck-through original, the discount. Each one claims the amount it sits next
+  // to, so what's left over is the real price.
+  const CLAIM_RE = /\b(shipping|ship|delivery|freight|handling|tax|fee|was|were|reg|regular|orig|original|originally|msrp|save|savings|discount|coupon|off)\b/gi;
+
+  function allPrices(t) {
     const out = [];
     let m;
     PRICE_RE.lastIndex = 0;
-    while ((m = PRICE_RE.exec(t)) && out.length < 1) {
+    while ((m = PRICE_RE.exec(t))) {
       const n = parseFloat(m[1].replace(/,/g, ""));
-      if (!isNaN(n)) out.push(n);
+      if (!isNaN(n)) out.push({ n, start: m.index, end: m.index + m[0].length });
     }
-    return { prices: out, range: false };
+    return out;
+  }
+
+  // Choose which amount in a mixed string is the price. "Was $19.99 now $12.99" is
+  // $12.99; "Shipping $0.99 Price $4.99" is $4.99. A marker claims the amount that
+  // follows it when one is close by, otherwise the amount just before it — that
+  // covers both "Shipping: $0.99" and "$0.00 Shipping". When several unclaimed
+  // amounts remain in marker-bearing text we'd only be guessing, so we show nothing.
+  function pickPrice(t) {
+    const amounts = allPrices(t);
+    if (!amounts.length) return null;
+    if (amounts.length === 1) return amounts[0].n;
+
+    const claimed = new Set();
+    let mk, sawMarker = false;
+    CLAIM_RE.lastIndex = 0;
+    while ((mk = CLAIM_RE.exec(t))) {
+      sawMarker = true;
+      const at = mk.index, endAt = at + mk[0].length;
+      let idx = amounts.findIndex((a, i) => a.start >= endAt && a.start - endAt <= 15 && !claimed.has(i));
+      if (idx < 0) {
+        for (let i = amounts.length - 1; i >= 0; i--) {
+          if (amounts[i].end <= at && at - amounts[i].end <= 15 && !claimed.has(i)) { idx = i; break; }
+        }
+      }
+      if (idx >= 0) claimed.add(idx);
+    }
+
+    const left = amounts.filter((_, i) => !claimed.has(i));
+    if (left.length === 1) return left[0].n;
+    if (!sawMarker) return amounts[0].n;   // no markers: unchanged first-price behaviour
+    if (!left.length) return amounts[0].n; // every amount claimed: fall back to the first
+    return null;                           // genuinely ambiguous — better to show nothing
   }
 
   // Walk up from the hovered node to find the tightest element that holds a price.
@@ -248,11 +295,14 @@
   const TOTAL_LABEL_RE = /^(order\s+total|grand\s+total|total\s+charged|amount\s+due|total\s+due|total)\s*:?\s*\$?[\d.,]*$/i;
   const NOT_TOTAL_RE = /sub\s*total|item|shipping|tax|discount|credit|saving/i;
 
+  // Match whole path segments: "/product/12345/cartel-aristocrat" is not a cart.
+  const CART_SEG = ["cart", "carts", "shopping-cart", "checkout", "order", "orders"];
   function isCheckoutPage() {
     const p = (location.pathname || "").toLowerCase();
-    return /(^|\/)(cart|checkout|orders?)(\/|$)/.test(p) ||
-      p.indexOf("/checkout") >= 0 || p.indexOf("/cart") >= 0 ||
-      (location.hostname || "").indexOf("checkout") === 0;
+    if (p.split("/").some((s) => CART_SEG.indexOf(s) >= 0)) return true;
+    const host = (location.hostname || "").toLowerCase();
+    const label = host.split(".")[0];
+    return label === "cart" || label === "checkout";
   }
 
   function lastPriceIn(text) {
@@ -267,22 +317,50 @@
     return val;
   }
 
-  // Given the element holding the total's label, find the element that shows the amount.
+  // Any other money label that could be sitting next to the total. If one of these
+  // shows up in the row we're reading, we can't tell which amount is the total.
+  const OTHER_MONEY_RE = /sub\s*total|shipping|ship\b|tax|fee|item|discount|credit|coupon|save|saving|reward|store\s*credit|off\b/i;
+  const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
+
+  function priceCount(text) {
+    let m, c = 0;
+    PRICE_RE.lastIndex = 0;
+    while ((m = PRICE_RE.exec(text))) c++;
+    return c;
+  }
+
+  // Given the element holding the total's label, find the element showing the amount.
+  // The amount has to be in the label itself, in one of its next few siblings, or in
+  // the nearest shared row — and that row has to be unambiguous. A "You save $10.00"
+  // cousin two levels up is not the order total, so we annotate nothing instead.
   function findAmountEl(labelEl) {
     if (lastPriceIn(labelEl.textContent) !== null) return labelEl;
+
     let sib = labelEl.nextElementSibling, n = 0;
     while (sib && n < 3) {
-      if (lastPriceIn(sib.textContent) !== null) return sib;
+      const txt = norm(sib.textContent);
+      const isChip = sib.classList && sib.classList.contains(CHIP_CLASS);
+      if (!isChip && lastPriceIn(txt) !== null) {
+        if (OTHER_MONEY_RE.test(txt) || priceCount(txt) > 1) return null;
+        return sib;
+      }
       sib = sib.nextElementSibling; n++;
     }
+
+    const labelTxt = norm(labelEl.textContent);
     let parent = labelEl.parentElement, hops = 0;
     while (parent && hops < 2) {
-      if ((parent.textContent || "").length < 120) {
+      const ptxt = norm(parent.textContent);
+      if (lastPriceIn(ptxt) !== null) {
+        if (ptxt.length > 120) return null;
+        const rest = ptxt.replace(labelTxt, " ");
+        if (priceCount(ptxt) !== 1 || OTHER_MONEY_RE.test(rest)) return null;
         for (const child of parent.children) {
           if (child === labelEl || child.contains(labelEl)) continue;
-          if (child.classList.contains(CHIP_CLASS)) continue;
+          if (child.classList && child.classList.contains(CHIP_CLASS)) continue;
           if (lastPriceIn(child.textContent) !== null) return child;
         }
+        return null;
       }
       parent = parent.parentElement; hops++;
     }
@@ -334,16 +412,29 @@
     annotateTimer = setTimeout(() => { try { annotateTotals(); } catch (e) { /* never break the page */ } }, 350);
   }
 
+  // True for anything inside our own tooltip — its hover re-renders are not page news.
+  function inOurUI(node) {
+    const el = node && (node.nodeType === 1 ? node : node.parentElement);
+    if (!el) return false;
+    if (el.id === TIP_ID) return true;
+    if (tip && tip.contains && tip.contains(el)) return true;
+    return !!(el.closest && el.closest("#" + TIP_ID));
+  }
+
   function watchCart() {
     if (typeof MutationObserver === "undefined" || !document.body) return;
     const obs = new MutationObserver((records) => {
-      // Ignore mutations that are only our own chips, otherwise we'd loop.
+      // Ignore mutations that are only our own chips or tooltip, otherwise every
+      // hover re-render would schedule a scan (and chips would loop).
       for (const r of records) {
+        if (inOurUI(r.target)) continue;
+        let sawPageNode = false;
         for (const n of r.addedNodes) {
           if (n.nodeType === 1 && n.classList && n.classList.contains(CHIP_CLASS)) continue;
-          scheduleAnnotate();
-          return;
+          if (inOurUI(n)) continue;
+          sawPageNode = true;
         }
+        if (sawPageNode) { scheduleAnnotate(); return; }
         if (r.type === "characterData" || r.removedNodes.length) { scheduleAnnotate(); return; }
       }
     });
@@ -365,16 +456,24 @@
     if (active) { lastEvt = e; position(e); }
   }
 
+  // Prices on search results live *inside* the product card's <a>, and listing rows
+  // put them next to "Add to cart". Pinning must never swallow those clicks, so we
+  // only pin when the click lands on plain markup — and we never stop propagation.
+  const INTERACTIVE_SEL = 'a[href],button,[role="button"],input,select,label,[onclick]';
+
   function onClick(e) {
     if (pinned) { hide(); return; }           // click anywhere unpins
-    const info = findPriceEl(e.target);
+    const t = e.target;
+    const el = t && (t.nodeType === 1 ? t : t.parentElement);
+    if (!el) return;
+    if (el.closest && el.closest(INTERACTIVE_SEL)) return;  // let the page have it
+    const info = findPriceEl(el);
     if (!info) return;
     pinned = true;
     lastInfo = info;
     lastEvt = { clientX: e.clientX, clientY: e.clientY };
     render(info, lastEvt);
-    e.preventDefault();                        // don't follow the price's link while pinning
-    e.stopPropagation();
+    e.preventDefault();                        // a bare price has no default action anyway
   }
 
   function onKey(e) {
@@ -396,5 +495,7 @@
   }
 
   // Exported for the offline parser harness; harmless in a browser (no `module`).
-  if (typeof module !== "undefined" && module.exports) module.exports = { pricesIn, lastPriceIn };
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = { pricesIn, lastPriceIn, findAmountEl, isCheckoutPage, onClick };
+  }
 })();
