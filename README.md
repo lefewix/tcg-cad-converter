@@ -1,14 +1,17 @@
 # TCG CAD Converter
 
-A browser extension that shows CAD conversions for USD prices on TCGplayer. Hover any price to see it converted using a live daily exchange rate, with an optional market-price percentage for estimating buylist or trade values.
+A browser extension that converts USD prices on TCGplayer into your own currency (CAD by default). Hover any price to see it converted using a live daily exchange rate, with an optional market-price percentage for estimating buylist or trade values.
 
 ## Features
 
-- **Hover to convert** — a tooltip appears next to any USD price on TCGplayer with its CAD equivalent
+- **Hover to convert** — a tooltip appears next to any USD price on TCGplayer with its converted equivalent
+- **Pin the tooltip** — click a price to pin the tooltip in place; it stops following the cursor and survives scrolling. Esc or a click elsewhere unpins
+- **Cart & checkout totals** — on cart and checkout pages the order total is annotated in place with a small converted chip
+- **Choose your currency** — CAD, EUR, GBP, AUD, JPY, or MXN, set in the popup and synced across your browsers
 - **Market percentage** — set your own percentage (e.g. 90%) to see adjusted values alongside the straight conversion
-- **Live daily rate** — USD→CAD from Frankfurter (European Central Bank reference rates), with an automatic fallback source
-- **Price ranges** — elements containing two prices (e.g. low–high market ranges) are converted as a range
-- **Non-invasive** — the page itself is never modified; the tooltip floats above it
+- **Live daily rate** — from Frankfurter (European Central Bank reference rates), with an automatic fallback source
+- **Price ranges** — a range is shown only when the text actually reads as one (`$10.00 – $15.00`); anything else converts the first price
+- **Stale-rate warning** — if the cached rate is over 24 hours old, the tooltip says so
 
 ## Installation
 
@@ -20,13 +23,14 @@ A browser extension that shows CAD conversions for USD prices on TCGplayer. Hove
 ## Usage
 
 1. Browse [tcgplayer.com](https://www.tcgplayer.com) and hover over any USD price — the CAD conversion appears in a tooltip
-2. Click the toolbar icon to set your market price percentage and view the current exchange rate
-3. Use **Refresh** in the popup to force a rate update
+2. Click a price to pin the tooltip; press Esc or click elsewhere to unpin
+3. Click the toolbar icon to pick your target currency, set your market price percentage, and view the current exchange rate
+4. Use **Refresh** in the popup to force a rate update
 
 ## How it works
 
-- **Rates** — the background service worker fetches USD→CAD from [Frankfurter](https://frankfurter.dev) (ECB reference rates, no API key) and falls back to [open.er-api.com](https://open.er-api.com) if unreachable. The rate is cached in `chrome.storage.local`, treated as fresh for 24 hours, and refreshed on a 6-hour alarm. A short cooldown prevents hammering the APIs after a failed fetch.
-- **Detection** — the content script uses event delegation to find prices under the cursor, so prices loaded later (scrolling, filtering, navigation) work automatically. TCGplayer is a React app, so the page is never rewritten — only a floating tooltip is rendered.
+- **Rates** — the background service worker fetches USD→your currency from [Frankfurter](https://frankfurter.dev) (ECB reference rates, no API key) and falls back to [open.er-api.com](https://open.er-api.com) if unreachable. The rate is cached in `chrome.storage.local`, treated as fresh for 24 hours, and refreshed on a 6-hour alarm. A short cooldown prevents hammering the APIs after a failed fetch.
+- **Detection** — the content script uses event delegation to find prices under the cursor, so prices loaded later (scrolling, filtering, navigation) work automatically. TCGplayer is a React app, so product pages are never rewritten — only a floating tooltip is rendered. The one in-place edit is the cart/checkout total chip, which is found by the total's label text (not by class names), is re-applied by a debounced `MutationObserver` when React re-renders, and is never added twice.
 
 ## Privacy
 

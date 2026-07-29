@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "TCG CAD Converter",
-  "version": "1.0.0",
-  "description": "Hover any USD price on TCGplayer to see it in CAD, adjusted by your own market percentage. Daily live exchange rate.",
+  "version": "1.1.0",
+  "description": "Hover any USD price on TCGplayer to see it in CAD (or EUR, GBP, AUD, JPY, MXN), adjusted by your own market percentage. Daily live exchange rate.",
   "author": "Felix Wang",
   "permissions": [
     "storage",
