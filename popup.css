@@ -1,24 +1,24 @@
-/* TCG CAD Converter — warm-paper family base: cream surfaces, walnut ink,
-   almond tints. The single solid-ink button is the only loud thing. */
+/* TCG CAD Converter — dark mauve family base: near-black surfaces, single mauve
+   accent, rose-tinted inks. */
 :root {
-  --ac: #433633;
-  --ac2: #5c5552;
-  --ac-pale: #6b5744;
-  --ac-soft: #decbb7;
-  --bg: #f7f0f5;
-  --surface: #fffdfb;
-  --surface3: #fbf6f2;
-  --inp: #fffdfb;
-  --txt: #433633;
-  --txtstrong: #2a211e;
-  --m1: #5c5552;
-  --m4: #6e6560;
-  --m7: #8f857d;
-  --b1: #e0d5cb;
-  --hair: rgba(67, 54, 51, .12);
-  --hairh: rgba(67, 54, 51, .24);
-  --err: #a94438;
-  --warn: #946300;   /* staleness is ochre across the family, never red */
+  --ac: #a288a6;
+  --ac2: #b299b6;
+  --ac-pale: #c9b3cc;
+  --ac-soft: #bb9bb0;
+  --bg: #1c1d21;
+  --surface: #232428;
+  --surface3: #27282d;
+  --inp: #141518;
+  --txt: #f1e3e4;
+  --txtstrong: #ffffff;
+  --m1: #ccbcbc;
+  --m4: #b1a4a7;
+  --m7: #948a8e;
+  --b1: #35363c;
+  --hair: rgba(241, 227, 228, .09);
+  --hairh: rgba(241, 227, 228, .16);
+  --err: #e08d8d;
+  --warn: #d9aa5e;   /* staleness is amber across the family, never red */
   --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
 }
 
@@ -76,7 +76,7 @@ header {
   background: var(--surface);
   border: 1px solid var(--hair);
   border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(67, 54, 51, .12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .4);
 }
 
 .convert {
@@ -187,7 +187,7 @@ select option { background: var(--surface); color: var(--txt); }
   background: var(--ac);
   border: 1px solid var(--ac);
   border-radius: 7px;
-  color: #f7f0f5;
+  color: #1c1d21;
   font: inherit;
   font-size: 11px;
   font-weight: 600;
