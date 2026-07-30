@@ -1,7 +1,8 @@
 /* content.css — the hover tooltip shown on TCGplayer price pages.
-   FLX design base adapted for TCGplayer's light pages: light surface, hairline
-   border, single violet accent, monospace numerals. Every rule is scoped under
-   #tcgcad-tip so nothing leaks into the host page.
+   Warm-paper family, inverted: TCGplayer's pages are white, so the tooltip wears the
+   family's dark umber surface with cream ink. It can never be mistaken for the host
+   page's own chrome, and it holds contrast wherever it floats.
+   Every rule is scoped under #tcgcad-tip so nothing leaks into the host page.
    High z-index + fixed positioning so it floats above TCGplayer's own UI.
    pointer-events:none keeps it from stealing hover from the price underneath. */
 
@@ -13,11 +14,11 @@
   margin: 0;
   padding: 9px 11px;
   max-width: 260px;
-  background: #ffffff;
-  color: #2a2833;
-  border: 1px solid rgba(139, 92, 246, .22);
+  background: #2a211e;
+  color: #f7f0f5;
+  border: 1px solid rgba(222, 203, 183, .30);
   border-radius: 12px;
-  box-shadow: 0 4px 16px rgba(28, 16, 60, .16);
+  box-shadow: 0 4px 16px rgba(67, 54, 51, .35);
   font: 12px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
@@ -35,10 +36,10 @@
   flex-wrap: wrap;
   margin-bottom: 7px;
   padding: 3px 7px;
-  background: rgba(139, 92, 246, .10);
-  border: 1px solid rgba(139, 92, 246, .24);
+  background: rgba(222, 203, 183, .14);
+  border: 1px solid rgba(222, 203, 183, .30);
   border-radius: 7px;
-  color: #5b30c4;
+  color: #decbb7;
   font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 14px;
   font-weight: 700;
@@ -46,21 +47,21 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-#tcgcad-tip .tip-main .usd { color: #6f6b80; font-weight: 600; }
-#tcgcad-tip .tip-main .arrow { color: #8b5cf6; margin: 0 6px; font-weight: 700; }
+#tcgcad-tip .tip-main .usd { color: #a89d94; font-weight: 600; }
+#tcgcad-tip .tip-main .arrow { color: #decbb7; margin: 0 6px; font-weight: 700; }
 #tcgcad-tip.range .tip-main { font-size: 12.5px; }
 
 #tcgcad-tip .tip-row {
   display: flex;
   justify-content: space-between;
   gap: 16px;
-  color: #6f6b80;
+  color: #a89d94;
   font-size: 11px;
   line-height: 1.7;
   font-variant-numeric: tabular-nums;
 }
 #tcgcad-tip .tip-row b {
-  color: #2a2833;
+  color: #f7f0f5;
   font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 11px;
   font-weight: 600;
@@ -70,37 +71,37 @@
 #tcgcad-tip .tip-foot {
   margin-top: 7px;
   padding-top: 6px;
-  border-top: 1px solid rgba(20, 12, 45, .10);
-  color: #8a879d;
+  border-top: 1px solid rgba(247, 240, 245, .12);
+  color: #8f857d;
   font-size: 10px;
   letter-spacing: .01em;
 }
 
-/* Stale-rate warning: amber-adjacent, but dark enough on its own tint to clear
-   4.5:1 (#8a5a00 on #fff8e6 ≈ 5.5:1). Deliberately louder than .tip-foot. */
+/* Stale-rate warning: warm ochre on its own tint, readable on the dark surface.
+   Deliberately louder than .tip-foot. */
 #tcgcad-tip .tip-stale {
   margin-top: 7px;
   padding: 5px 7px;
-  background: #fff8e6;
-  border: 1px solid rgba(180, 120, 10, .38);
+  background: rgba(240, 196, 106, .12);
+  border: 1px solid rgba(240, 196, 106, .38);
   border-radius: 7px;
-  color: #8a5a00;
+  color: #f0c46a;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
 }
 
-/* Pinned state: accent rail + a quiet how-to-dismiss line. */
+/* Pinned state: almond rail + a quiet how-to-dismiss line. */
 #tcgcad-tip.pinned {
-  border-color: rgba(139, 92, 246, .45);
-  box-shadow: 0 6px 20px rgba(28, 16, 60, .22);
+  border-color: rgba(222, 203, 183, .55);
+  box-shadow: 0 6px 20px rgba(67, 54, 51, .42);
 }
 #tcgcad-tip .tip-pin {
   display: flex;
   align-items: center;
   gap: 5px;
   margin-top: 6px;
-  color: #6d43c9;
+  color: #decbb7;
   font-size: 10px;
   font-weight: 600;
   letter-spacing: .02em;
@@ -110,30 +111,31 @@
   width: 5px;
   height: 5px;
   border-radius: 2px;
-  background: #8b5cf6;
+  background: #decbb7;
 }
 
 /* Quiet affordance: only shown when the price under the cursor can actually be
    pinned (clicks inside links and buttons still belong to the page). */
 #tcgcad-tip .tip-hint {
   margin-top: 6px;
-  color: #7a7690;
+  color: #a89d94;
   font-size: 10px;
   font-weight: 500;
   letter-spacing: .02em;
 }
 
-/* Cart / checkout order-total chip. Inline next to the site's own total. */
+/* Cart / checkout order-total chip. Inline next to the site's own total: the same
+   inverted umber surface as the tooltip, so both floating pieces read as one tool. */
 .tcgcad-total-chip {
   display: inline-block;
   box-sizing: border-box;
   margin: 0 0 0 8px;
   padding: 2px 7px;
   vertical-align: baseline;
-  background: rgba(139, 92, 246, .10);
-  border: 1px solid rgba(139, 92, 246, .28);
+  background: #2a211e;
+  border: 1px solid rgba(222, 203, 183, .30);
   border-radius: 7px;
-  color: #5b30c4;
+  color: #decbb7;
   font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   font-weight: 700;
@@ -144,11 +146,10 @@
   text-transform: none;
 }
 
-/* Stale rate on a page where money is about to be committed: same amber as the
-   tooltip warning (#8a5a00 on #fff8e6 ≈ 5.5:1), with the age spelled out in the
-   chip text so it can't be missed. */
+/* Stale rate on a page where money is about to be committed: same ochre as the
+   tooltip warning, with the age spelled out in the chip text so it can't be missed. */
 .tcgcad-total-chip-stale {
-  background: #fff8e6;
-  border-color: rgba(180, 120, 10, .45);
-  color: #8a5a00;
+  background: #3a2c1c;
+  border-color: rgba(240, 196, 106, .45);
+  color: #f0c46a;
 }
