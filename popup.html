@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>TCG CAD Converter</title>
+  <title>TCG Currency Converter</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <header>
-    <span class="brand">TCG CAD Converter</span>
+    <span class="brand">TCG Currency Converter</span>
     <span class="hint live" id="liveBadge"><i></i>hover to convert</span>
   </header>
 
@@ -35,6 +35,7 @@
   <div class="box field">
     <label class="label" for="percent">Percentage of the listed price (%)</label>
     <input id="percent" type="number" min="1" max="500" step="1" inputmode="decimal">
+    <div class="note warn" id="percentNote" hidden></div>
   </div>
 
   <div class="box">

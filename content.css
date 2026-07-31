@@ -24,7 +24,7 @@
   -webkit-font-smoothing: antialiased;
   text-align: left;
   opacity: 0;
-  transition: opacity .15s ease;
+  transition: opacity .15s cubic-bezier(0.23, 1, 0.32, 1);
 }
 #tcgcad-tip.show { opacity: 1; }
 
@@ -49,7 +49,14 @@
 }
 #tcgcad-tip .tip-main .usd { color: #b1a4a7; font-weight: 600; }
 #tcgcad-tip .tip-main .arrow { color: #bb9bb0; margin: 0 6px; font-weight: 700; }
-#tcgcad-tip.range .tip-main { font-size: 12.5px; }
+#tcgcad-tip.range .tip-main { font-size: 12px; }
+
+/* Terminal error state: both rate APIs failed — muted red, no accent tint. */
+#tcgcad-tip .tip-main.tip-err {
+  background: rgba(224, 141, 141, .12);
+  border-color: rgba(224, 141, 141, .38);
+  color: #e08d8d;
+}
 
 #tcgcad-tip .tip-row {
   display: flex;
@@ -73,7 +80,7 @@
   padding-top: 6px;
   border-top: 1px solid rgba(241, 227, 228, .12);
   color: #948a8e;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: .01em;
 }
 
@@ -102,7 +109,7 @@
   gap: 5px;
   margin-top: 6px;
   color: #c9b3cc;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: .02em;
 }
@@ -119,7 +126,7 @@
 #tcgcad-tip .tip-hint {
   margin-top: 6px;
   color: #948a8e;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: .02em;
 }
@@ -144,6 +151,12 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   text-transform: none;
+  animation: tcgcad-chip-in .15s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@keyframes tcgcad-chip-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* Stale rate on a page where money is about to be committed: same amber as the
@@ -152,4 +165,9 @@
   background: #2b2419;
   border-color: rgba(217, 170, 94, .45);
   color: #d9aa5e;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #tcgcad-tip { transition: none; }
+  .tcgcad-total-chip { animation: none; }
 }

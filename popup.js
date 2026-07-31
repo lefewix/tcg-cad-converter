@@ -13,6 +13,7 @@ const normCur = (c) => {
 // carry over untouched; `targetCurrency` is new and defaults to CAD.
 let settings = { percent: 90, targetCurrency: DEFAULT_CURRENCY };
 let fx = null;
+let fxError = null;       // set when the background reports both rate APIs failed
 
 const code = () => normCur(settings.targetCurrency);
 const money = (n) => new Intl.NumberFormat("en-US", { style: "currency", currency: code() }).format(n);
@@ -52,24 +53,37 @@ function renderPreview() {
       : pct + "% of the listed price: " + money(100 * (pct / 100) * fx.rate);
   } else {
     $("previewCad").textContent = money(0).replace(/[\d.,]+/, "—"); // e.g. "CA$—"
-    $("previewNote").textContent = "Waiting for today’s rate…";
+    $("previewNote").textContent = fxError
+      ? "Couldn’t fetch rate — check connection"
+      : "Waiting for today’s rate…";
   }
 }
 
 function renderRate() {
   const badge = $("liveBadge");
+  const meta = $("rateMeta");
   $("rateLabel").textContent = "1 USD equals";
+  meta.classList.remove("err");
+  meta.title = "";
   if (rateUsable()) {
     $("rateVal").textContent = fx.rate.toFixed(4) + " " + code();
     const age = staleness(fx);
-    $("rateMeta").textContent =
+    meta.textContent =
       (fx.date ? "ECB rate " + fx.date + " · " : "") +
       "checked " + ago(Date.now() - (fx.fetchedAt || 0)) +
       (fx.source === "er-api" ? " · backup source" : "");
+    if (fx.source === "er-api") {
+      meta.title = "Frankfurter (ECB) was unreachable — this rate came from the backup provider, open.er-api.com.";
+    }
     badge.classList.toggle("stale", age > 24 * 3600 * 1000);
   } else {
     $("rateVal").textContent = "—";
-    $("rateMeta").textContent = fx ? "Fetching " + code() + "…" : "No rate yet";
+    if (fxError) {
+      meta.textContent = "Couldn’t fetch rate — check connection";
+      meta.classList.add("err");
+    } else {
+      meta.textContent = fx ? "Fetching " + code() + "…" : "No rate yet";
+    }
     badge.classList.add("stale");
   }
 }
@@ -77,41 +91,81 @@ function renderRate() {
 function renderAll() { renderPreview(); renderRate(); }
 
 // ---- load ----
+// Settings first, cached rate second, and only THEN a rate request — asking
+// before the currency is known would fetch/cache the default (CAD) even when
+// the user has picked something else.
 chrome.storage.sync.get({ percent: 90, targetCurrency: DEFAULT_CURRENCY }, (s) => {
   settings = s;
   $("percent").value = s.percent;
   $("currency").value = code();
-  renderAll();
-  if (!rateUsable()) askRate(false);
-});
-chrome.storage.local.get("fxRate", (o) => {
-  fx = o.fxRate || null;
-  renderAll();
-  if (!rateUsable()) askRate(false);
+  chrome.storage.local.get("fxRate", (o) => {
+    fx = o.fxRate || null;
+    renderAll();
+    if (!rateUsable()) askRate(false);
+  });
 });
 
 // ---- interactions ----
 let saveTimer = null;
+function clampPercent() {
+  const raw = Number($("percent").value);
+  const v = Math.max(1, Math.min(500, raw || 90));
+  return { v, clamped: raw !== 0 && !isNaN(raw) && raw !== v };
+}
 $("percent").addEventListener("input", () => {
-  const v = Math.max(1, Math.min(500, Number($("percent").value) || 90));
+  const { v } = clampPercent();
   settings.percent = v;
+  $("percentNote").hidden = true;
   renderPreview();
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => chrome.storage.sync.set({ percent: v }), 250);
 });
+// On commit (blur/Enter), write the clamped value back into the field and say so —
+// the input must never display 900 while 500 is what's actually saved.
+$("percent").addEventListener("change", () => {
+  const { v, clamped } = clampPercent();
+  $("percent").value = v;
+  const note = $("percentNote");
+  note.hidden = !clamped;
+  if (clamped) note.textContent = "Adjusted to " + v + "% (allowed range 1–500)";
+});
 
 $("currency").addEventListener("change", () => {
   settings.targetCurrency = normCur($("currency").value);
+  fxError = null;
   chrome.storage.sync.set({ targetCurrency: settings.targetCurrency });
   renderAll();          // shows "Fetching EUR…" until the new rate lands
-  askRate(false);
+  // No askRate here: the background's storage.onChanged listener already
+  // force-refreshes for the new currency; a second request would race it.
 });
 
+let rateReqInFlight = false;
 function askRate(force) {
-  $("rateMeta").textContent = force ? "Refreshing…" : $("rateMeta").textContent;
+  if (rateReqInFlight) return;
+  rateReqInFlight = true;
+  const btn = $("refresh");
+  btn.disabled = true;
+  if (force) {
+    btn.textContent = "Refreshing…";
+    $("rateMeta").textContent = "Refreshing…";
+    $("rateMeta").classList.remove("err");
+  }
   chrome.runtime.sendMessage({ type: "getRate", force: !!force, currency: code() }, (resp) => {
-    if (chrome.runtime.lastError) { renderRate(); return; }
-    if (resp && resp.ok && resp.rate) fx = resp.rate;
+    rateReqInFlight = false;
+    btn.disabled = false;
+    btn.textContent = "Refresh";
+    if (chrome.runtime.lastError) {
+      fxError = "Couldn't reach the extension — try reopening the popup";
+      renderAll();
+      return;
+    }
+    if (resp && resp.ok && resp.rate) {
+      fx = resp.rate;
+      fxError = null;
+    } else {
+      // Both APIs failed — say so instead of silently reverting.
+      fxError = (resp && resp.error) || "Couldn't fetch rate — check connection";
+    }
     renderAll();
   });
 }
@@ -130,5 +184,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
     $("currency").value = code();
     renderAll();
   }
-  if (area === "local" && changes.fxRate) { fx = changes.fxRate.newValue; renderAll(); }
+  if (area === "local" && changes.fxRate) {
+    fx = changes.fxRate.newValue;
+    if (rateUsable()) fxError = null;
+    renderAll();
+  }
 });
