@@ -1,4 +1,4 @@
-# TCG CAD Converter
+# TCG Currency Converter
 
 A browser extension that converts USD prices on TCGplayer into your own currency (CAD by default). Hover any price to see it converted using a live daily exchange rate, with an optional market-price percentage for estimating buylist or trade values.
 

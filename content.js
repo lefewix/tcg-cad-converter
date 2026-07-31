@@ -38,6 +38,7 @@
 
   let settings = { percent: 90, targetCurrency: DEFAULT_CURRENCY };
   let fx = null;            // { rate, currency, fetchedAt, date, source }
+  let fxError = null;       // set when the background reports both rate APIs failed
   let tip = null;
   let active = false;
   let pinned = false;
@@ -54,16 +55,16 @@
 
   // ---- state: settings (synced) + cached rate (local) ----
   if (typeof chrome !== "undefined" && chrome.storage) {
+    // Settings first, cached rate second, and only THEN a rate request —
+    // asking before the currency is known would fetch/cache the default (CAD)
+    // even when the user has picked something else.
     chrome.storage.sync.get({ percent: 90, targetCurrency: DEFAULT_CURRENCY }, (s) => {
       settings = s;
-      if (!rateUsable()) requestRate(false);
-      scheduleAnnotate();
-    });
-
-    chrome.storage.local.get("fxRate", (o) => {
-      fx = o.fxRate || null;
-      if (!rateUsable() || staleness(fx) > STALE_MS) requestRate(false);
-      scheduleAnnotate();
+      chrome.storage.local.get("fxRate", (o) => {
+        fx = o.fxRate || null;
+        if (!rateUsable() || staleness(fx) > STALE_MS) requestRate(false);
+        scheduleAnnotate();
+      });
     });
 
     chrome.storage.onChanged.addListener((changes, area) => {
@@ -78,6 +79,7 @@
       }
       if (area === "local" && changes.fxRate) {
         fx = changes.fxRate.newValue;
+        if (rateUsable()) fxError = null;
         if (active && lastInfo) render(lastInfo, lastEvt);
         scheduleAnnotate();
       }
@@ -123,9 +125,13 @@
         if (chrome.runtime.lastError) return;
         if (resp && resp.ok && resp.rate) {
           fx = resp.rate;
-          if (active && lastInfo) render(lastInfo, lastEvt);
-          scheduleAnnotate();
+          fxError = null;
+        } else {
+          // Both APIs failed — show a real error, not eternal "fetching…".
+          fxError = (resp && resp.error) || "Couldn't fetch rate — check connection";
         }
+        if (active && lastInfo) render(lastInfo, lastEvt);
+        scheduleAnnotate();
       });
     } catch (e) { /* extension context can be torn down on reload; ignore */ }
   }
@@ -277,8 +283,9 @@
   // Plain-English age for the stale warning ("3 days old", not "72h ago").
   function oldness(ms) {
     const h = Math.floor(ms / 3600000);
-    if (h < 48) return h + " hours old";
-    return Math.floor(h / 24) + " days old";
+    if (h < 48) return h + (h === 1 ? " hour old" : " hours old");
+    const d = Math.floor(h / 24);
+    return d + (d === 1 ? " day old" : " days old");
   }
 
   // ---- tooltip ----
@@ -298,9 +305,16 @@
 
     if (!rateUsable()) {
       t.classList.remove("range");
-      t.innerHTML =
-        '<div class="tip-main">Fetching today’s rate…</div>' +
-        '<div class="tip-foot">' + code + " will appear in a moment</div>";
+      if (fxError) {
+        // Terminal error state — both APIs failed. Say so instead of spinning.
+        t.innerHTML =
+          '<div class="tip-main tip-err">Couldn’t fetch rate</div>' +
+          '<div class="tip-foot">Check your connection — will retry automatically</div>';
+      } else {
+        t.innerHTML =
+          '<div class="tip-main">Fetching today’s rate…</div>' +
+          '<div class="tip-foot">' + code + " will appear in a moment</div>";
+      }
       requestRate(false);
     } else {
       const rate = fx.rate;
@@ -446,8 +460,21 @@
     return null;
   }
 
+  // SPA navigation never reloads the page, so chips injected on a checkout view
+  // would linger after routing away. Track the URL and sweep our chips on change.
+  let lastHref = typeof location !== "undefined" ? location.href : "";
+  function sweepChipsOnNav() {
+    if (typeof location === "undefined" || location.href === lastHref) return;
+    lastHref = location.href;
+    if (!isCheckoutPage() && document.body) {
+      for (const chip of document.querySelectorAll("." + CHIP_CLASS)) chip.remove();
+    }
+  }
+
   function annotateTotals() {
-    if (!document.body || !isCheckoutPage() || !rateUsable()) return;
+    if (!document.body) return;
+    sweepChipsOnNav();
+    if (!isCheckoutPage() || !rateUsable()) return;
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const labels = [];
     let node, seen = 0;
@@ -572,7 +599,9 @@
     lastInfo = info;
     lastEvt = { clientX: e.clientX, clientY: e.clientY };
     render(info, lastEvt);
-    e.preventDefault();                        // a bare price has no default action anyway
+    // No preventDefault: isInteractive can't see React-attached handlers, so the
+    // page must keep its default behaviour. A bare price has none anyway, and we
+    // never stop propagation, so pinning is purely additive.
   }
 
   function onKey(e) {
@@ -589,7 +618,9 @@
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKey, true);
     window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("blur", hide);
+    // Pinned tooltips survive window blur — alt-tabbing away to compare prices
+    // is exactly what pinning is for. Only an unpinned hover tooltip hides.
+    window.addEventListener("blur", () => { if (!pinned) hide(); });
     watchCart();
   }
 
@@ -597,7 +628,7 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       pricesIn, pickPrice, lastPriceIn, findAmountEl, isCheckoutPage, onClick,
-      staleness, isInteractive, STALE_MS,
+      staleness, isInteractive, oldness, STALE_MS,
     };
   }
 })();
