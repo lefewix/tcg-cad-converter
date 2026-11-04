@@ -1,56 +1,75 @@
+<div align="center">
+
+<img src="icons/icon128.png" width="88" alt="TCG Currency Converter icon">
+
 # TCG Currency Converter
 
-A browser extension that converts USD prices on TCGplayer into your own currency (CAD by default). Hover any price to see it converted using a live daily exchange rate, with an optional market-price percentage for estimating buylist or trade values.
+**See TCGplayer prices in your own currency, just by hovering.**
+
+![Chrome extension](https://img.shields.io/badge/Chrome-extension-4285F4?style=flat-square&logo=googlechrome&logoColor=white)
+![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black)
+![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)
+
+</div>
+
+A browser extension that converts USD prices on TCGplayer into CAD (or EUR, GBP, AUD, JPY, MXN) using a live
+daily exchange rate.
 
 ## Features
 
-- **Hover to convert** — a tooltip appears next to any USD price on TCGplayer with its converted equivalent
-- **Pin the tooltip** — click a plain price to pin the tooltip in place; it stops following the cursor and survives scrolling. Esc or a click elsewhere unpins. Clicks on links, buttons, and other controls always go to the page, so search results and "Add to cart" keep working
-- **Cart & checkout totals** — on cart and checkout pages the order total is annotated in place with a small converted chip
-- **Choose your currency** — CAD, EUR, GBP, AUD, JPY, or MXN, set in the popup and synced across your browsers
-- **Percentage of the listed price** — set your own percentage (e.g. 90%) to see an adjusted value alongside the straight conversion. It is applied to the price you are hovering, which on TCGplayer is a seller's asking price — not an average of recent sales
-- **Live daily rate** — from Frankfurter (European Central Bank reference rates), with an automatic fallback source
-- **Price ranges** — a range is shown only when the text actually reads as one (`$10.00 – $15.00`, `US$10.00 - US$15.00`, `$10 to $15`). A label in front of the amounts (`You save $5.00 - $10.00`, `Shipping $1.00 - $3.00`) means they belong to that label, not to a price range, and a descending pair (`Balance due: $50.00 - $10.00`) is a subtraction — neither is presented as a range
-- **Mixed price text** — when a string carries shipping, sale, or discount labels (`Was $19.99 now $12.99`, `$3.99 shipping $12.99`), the actual price is converted rather than the first number; if it stays ambiguous, nothing is shown
-- **Stale-rate warning** — measured against the rate's own publication date, not against when it was fetched. Over 24 hours old and the tooltip says so; on a cart or checkout page the age is written into the converted chip itself
+- **Hover to convert**: a tooltip shows the converted price next to any USD price
+- **Pin the tooltip**: click a price to keep it in place while you scroll
+- **Cart and checkout totals**: converted right on the page
+- **Percentage view**: e.g. 90% of the price, for quick trade or buylist estimates
+- **Live daily rate**: European Central Bank rates, with an automatic backup source
+- **Handles messy prices**: ranges, "Was $19.99 now $12.99", shipping lines
 
-## Installation
+## Install
 
-1. Download or clone this repository
-2. Open `chrome://extensions` in Chrome, Brave, or Edge
-3. Enable **Developer mode** (top-right toggle)
-4. Click **Load unpacked** and select this project folder
+1. Download or clone this repo
+2. Open `chrome://extensions` in Chrome, Brave or Edge and turn on **Developer mode**
+3. Click **Load unpacked** and select this folder
 
 ## Usage
 
-1. Browse [tcgplayer.com](https://www.tcgplayer.com) and hover over any USD price — the CAD conversion appears in a tooltip
-2. Click a price to pin the tooltip; press Esc or click elsewhere to unpin
-3. Click the toolbar icon to pick your target currency, set your market price percentage, and view the current exchange rate
-4. Use **Refresh** in the popup to force a rate update
+1. Browse [tcgplayer.com](https://www.tcgplayer.com) and hover over any price
+2. Click a price to pin the tooltip; press Esc to unpin
+3. Click the toolbar icon to change currency, set a percentage, or refresh the rate
 
 ## How it works
 
-- **Rates** — the background service worker fetches USD→your currency from [Frankfurter](https://frankfurter.dev) (ECB reference rates, no API key) and falls back to [open.er-api.com](https://open.er-api.com) if unreachable. The rate is cached in `chrome.storage.local`, treated as fresh for 24 hours, and refreshed on a 6-hour alarm. A short cooldown prevents hammering the APIs after a failed fetch.
-- **Detection** — the content script uses event delegation to find prices under the cursor, so prices loaded later (scrolling, filtering, navigation) work automatically. TCGplayer is a React app, so product pages are never rewritten — only a floating tooltip is rendered. The one in-place edit is the cart/checkout total chip, which is found by the total's label text (not by class names), is re-applied by a debounced `MutationObserver` when React re-renders, and is never added twice. Cart pages are matched on whole path segments, and when the amount next to a total label is ambiguous (a neighbouring "You save" or shipping line) nothing is annotated rather than guessing.
+A background worker fetches the rate from [Frankfurter](https://frankfurter.dev) (ECB rates, no API key),
+falling back to [open.er-api.com](https://open.er-api.com). It's cached for 24 hours. The page script finds
+prices under the cursor with event delegation, so prices loaded later work too. TCGplayer's React pages are
+never rewritten: only a floating tooltip is drawn.
+
+<details>
+<summary><b>More details</b></summary>
+
+- **Price ranges** are shown only when the text really reads as one (`$10.00 – $15.00`, `$10 to $15`).
+  "You save $5.00 - $10.00" belongs to its label, and a descending pair is a subtraction, so neither is
+  shown as a range.
+- **Mixed text** like `$3.99 shipping $12.99` converts the actual price, not the first number. If it stays
+  ambiguous, nothing is shown.
+- **Stale-rate warning**: rate age is measured from the rate's own publication date. The ECB publishes on
+  weekdays only, so a weekend rate is correctly reported as 1 to 3 days old.
+- **Cart totals** are found by their label text, not class names, and re-applied when React re-renders.
+- **The percentage** applies to the listing price under your cursor, not to an average of recent sales.
+
+</details>
 
 ## Privacy
 
-The only network requests are to the two public exchange-rate APIs listed above. No page content, browsing data, or personal information is collected or transmitted.
+The only network requests go to the two public exchange-rate APIs. No page content or personal data is
+collected or sent.
 
-## Limitations
+## Development
 
-- Conversions use the ECB daily reference rate, which is not a retail exchange rate — treat values as estimates
-- **The ECB publishes on weekdays only.** There is no weekend fix: a rate fetched on Sunday is Friday's, and even a midweek "latest" is usually the previous day's. Rate age is therefore measured from the rate's own date, and over the weekend the tooltip and the cart chip will correctly report a rate that is one to three days old
-- The percentage is applied to the price under your cursor. That is a listing ask, not a sold average — a "90%" figure here is not comparable to one computed from recent sales
-- Only USD prices in standard formats (`$12.99`, `$1,234.56`) are detected
+No build step and no dependencies.
 
-## Tests
-
-`node test.js` — no dependencies, no build step. It covers the price-range grammar in both directions (what must render as a range and what must not), which amount in a mixed string is the price, rate staleness including the weekend ECB gap, cart-page detection, and which markup may be click-to-pinned. Exit code is non-zero on any failure.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md).
+```
+node test.js    # price parsing, ranges, rate staleness, cart detection
+```
 
 ## License
 
